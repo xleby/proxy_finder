@@ -13,7 +13,13 @@
       "Bash(echo *)",
       "Bash(===)",
       "Bash(findstr *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(git pull *)",
+      "Bash(git checkout *)",
+      "Bash(git *)"
     ]
   },
   "$version": 3

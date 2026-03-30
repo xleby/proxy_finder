@@ -71,10 +71,14 @@ class MTPProtoHunter:
         if not proxies:
             logger.warning("Прокси не найдены, переходим к следующему циклу")
             return
-        
+
+        # Обновляем файл proxy_mtproto.txt
+        logger.info("Обновление proxy_mtproto.txt...")
+        self.checker = Checker()
+        await self.checker.update_proxy_mtproto_file(proxies)
+
         # 2. Проверка
         logger.info("Этап 2: Проверка прокси...")
-        self.checker = Checker()
         new_best, good_proxies = await self.checker.run()
         
         if self._shutdown:

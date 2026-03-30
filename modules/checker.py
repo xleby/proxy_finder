@@ -5,13 +5,16 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple, List
 
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError
 from telethon.network import ConnectionTcpMTProxyRandomizedIntermediate
 
 import config
+
+# Путь к файлу с прокси для MTProto
+PROXY_MTProto_FILE = r"C:\Users\ddd\Documents\My Folder\proxy_mtproto.txt"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -310,7 +313,129 @@ class Checker:
         open(config.QUEUE_FILE, "w").close()
         
         return new_best, good_results
-    
+
+    def _load_proxy_mtproto_file(self) -> Tuple[List[str], List[str]]:
+        """
+        Загружает файл proxy_mtproto.txt.
+        
+        Returns:
+            (base_proxies, found_proxies) — кортеж из двух списков
+            base_proxies — прокси до "---" (не трогать)
+            found_proxies — прокси после "---" (найденные скриптом)
+        """
+        base_proxies = []
+        found_proxies = []
+        
+        try:
+            with open(PROXY_MTProto_FILE, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            
+            in_found_section = False
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                if line == "---":
+                    in_found_section = True
+                    continue
+                
+                if in_found_section:
+                    found_proxies.append(line)
+                else:
+                    base_proxies.append(line)
+                    
+        except FileNotFoundError:
+            logger.warning(f"Файл {PROXY_MTProto_FILE} не найден")
+        
+        return base_proxies, found_proxies
+
+    def _save_proxy_mtproto_file(self, base_proxies: List[str], found_proxies: List[str]):
+        """
+        Сохраняет файл proxy_mtproto.txt.
+        
+        Args:
+            base_proxies — базовые прокси (не трогать)
+            found_proxies — найденные прокси
+        """
+        with open(PROXY_MTProto_FILE, "w", encoding="utf-8") as f:
+            # Пишем базовые прокси
+            for proxy_url in base_proxies:
+                f.write(f"{proxy_url}\n")
+            
+            # Разделитель
+            f.write("---\n")
+            
+            # Пишем найденные прокси
+            for proxy_url in found_proxies:
+                f.write(f"{proxy_url}\n")
+        
+        logger.info(f"💾 Сохранено {len(found_proxies)} найденных прокси в {PROXY_MTProto_FILE}")
+
+    async def update_proxy_mtproto_file(self, new_proxies: List[dict]):
+        """
+        Обновляет файл proxy_mtproto.txt:
+        1. Загружает базовые и найденные прокси
+        2. Проверяет найденные прокси (после "---")
+        3. Удаляет нерабочие
+        4. Добавляет новые найденные
+        
+        Args:
+            new_proxies — список новых прокси от скрапера
+        """
+        # Загружаем текущие прокси
+        base_proxies, existing_found = self._load_proxy_mtproto_file()
+        
+        logger.info(f"Загружено из файла: {len(base_proxies)} базовых, {len(existing_found)} найденных")
+        
+        # Парсим существующие найденные прокси для проверки
+        existing_to_check = []
+        for url in existing_found:
+            from utils.normalizer import parse_proxy_url
+            proxy_data = parse_proxy_url(url)
+            if proxy_data:
+                existing_to_check.append(proxy_data)
+        
+        # Проверяем существующие найденные прокси
+        working_found_urls = []
+        if existing_to_check:
+            logger.info(f"Проверка {len(existing_to_check)} найденных прокси...")
+            results = await self.check_batch(existing_to_check[:10])  # Максимум 10 для скорости
+            
+            for i, result in enumerate(results):
+                if result.is_working:
+                    working_found_urls.append(existing_found[i])
+                    logger.info(f"✅ Работает: {result.host}:{result.port}")
+                else:
+                    logger.info(f"❌ Не работает: {existing_found[i]}")
+        
+        # Добавляем новые прокси (если они не дублируются)
+        existing_urls = set(working_found_urls)
+        new_urls = []
+        
+        for proxy in new_proxies[:20]:  # Максимум 20 новых
+            url = proxy.get("url", "")
+            if url and url not in existing_urls:
+                # Проверяем что прокси рабочий
+                result = await self.check_proxy(
+                    proxy["host"],
+                    proxy["port"],
+                    proxy["secret"],
+                    url
+                )
+                if result.is_working:
+                    new_urls.append(url)
+                    logger.info(f"✅ Добавлен новый: {result.host}:{result.port}")
+        
+        # Объединяем рабочие старые + новые
+        final_found = working_found_urls + new_urls
+        
+        # Сохраняем файл
+        self._save_proxy_mtproto_file(base_proxies, final_found)
+        
+        logger.info(f"Итого найдено рабочих: {len(final_found)} прокси")
+
     async def run(self):
         """Запускает проверку очереди прокси."""
         logger.info("=== ЗАПУСК CHECKER ===")
