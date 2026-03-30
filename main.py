@@ -12,7 +12,7 @@ import config
 from modules.scraper import Scraper
 from modules.checker import Checker
 from modules.notifier import Notifier
-from modules.stability_checker import StabilityChecker, filter_stable_proxies
+from modules.validator import ProxyValidator, filter_valid_proxies
 
 logging.basicConfig(
     level=logging.INFO,
@@ -85,10 +85,10 @@ class MTPProtoHunter:
         if self._shutdown:
             return
 
-        # 2.5. Проверка на стабильность
+        # 2.5. Проверка на стабильность (Validator)
         if good_proxies:
-            logger.info("Этап 2.5: Проверка на стабильность...")
-            # Конвертируем CheckResult в dict для stability checker
+            logger.info("Этап 2.5: Комплексная валидация прокси...")
+            # Конвертируем CheckResult в dict для validator
             proxies_for_check = [
                 {
                     "host": r.host,
@@ -99,18 +99,21 @@ class MTPProtoHunter:
                 for r in good_proxies
             ]
             
-            stable_proxies, unstable_proxies = await filter_stable_proxies(proxies_for_check)
+            valid_proxies, invalid_proxies = await filter_valid_proxies(
+                proxies_for_check,
+                min_score=70.0
+            )
             
-            # Фильтруем good_proxies оставляя только стабильные
-            stable_hosts = {(p["host"], p["port"]) for p in stable_proxies}
-            good_proxies = [r for r in good_proxies if (r.host, r.port) in stable_hosts]
+            # Фильтруем good_proxies оставляя только валидные
+            valid_hosts = {(p["host"], p["port"]) for p in valid_proxies}
+            good_proxies = [r for r in good_proxies if (r.host, r.port) in valid_hosts]
             
             # Также фильтруем new_best если он есть
-            if new_best and (new_best.host, new_best.port) not in stable_hosts:
-                logger.warning(f"Лучший прокси нестабилен: {new_best.host}:{new_best.port}")
+            if new_best and (new_best.host, new_best.port) not in valid_hosts:
+                logger.warning(f"Лучший прокси не прошёл валидацию: {new_best.host}:{new_best.port}")
                 new_best = None
             
-            logger.info(f"После проверки стабильности: {len(good_proxies)} прокси")
+            logger.info(f"После валидации: {len(good_proxies)} прокси")
 
         # 3. Уведомление
         if notify and good_proxies:
