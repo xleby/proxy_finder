@@ -13,7 +13,7 @@ from statistics import mean, stdev
 from typing import List, Optional, Tuple
 
 from telethon import TelegramClient
-from telethon.errors import ConnectionResetError, IncompleteReadError
+from telethon.errors import IncompleteReadError
 from telethon.network import ConnectionTcpMTProxyRandomizedIntermediate
 from telethon.tl.functions.channels import GetMessagesRequest
 from telethon.tl.types import InputChannel
@@ -179,7 +179,7 @@ class ProxyValidator:
             logger.info(f"  ✅ Keep-Alive пройден (сессия {session_duration:.1f} сек)")
             return True, session_duration
             
-        except (ConnectionResetError, IncompleteReadError, asyncio.TimeoutError) as e:
+        except (OSError, IncompleteReadError, asyncio.TimeoutError) as e:
             session_duration = time.time() - start_time
             logger.info(f"  ❌ Keep-Alive провален: {type(e).__name__} через {session_duration:.1f} сек")
             return False, session_duration
