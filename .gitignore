@@ -1,0 +1,34 @@
+# Сессии Telethon
+*.session
+*.session-journal
+
+# Логи
+*.log
+
+# Окружение
+.env
+
+# Кэш Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Виртуальное окружение
+venv/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Файлы данных
+best_proxy.txt
+good_proxies.txt
+queue.txt
+
+# Подписчики
+subscribers.json
