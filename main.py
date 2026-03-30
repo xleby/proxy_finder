@@ -12,6 +12,7 @@ import config
 from modules.scraper import Scraper
 from modules.checker import Checker
 from modules.notifier import Notifier
+from modules.stability_checker import StabilityChecker, filter_stable_proxies
 
 logging.basicConfig(
     level=logging.INFO,
@@ -80,10 +81,37 @@ class MTPProtoHunter:
         # 2. Проверка
         logger.info("Этап 2: Проверка прокси...")
         new_best, good_proxies = await self.checker.run()
-        
+
         if self._shutdown:
             return
-        
+
+        # 2.5. Проверка на стабильность
+        if good_proxies:
+            logger.info("Этап 2.5: Проверка на стабильность...")
+            # Конвертируем CheckResult в dict для stability checker
+            proxies_for_check = [
+                {
+                    "host": r.host,
+                    "port": r.port,
+                    "secret": r.secret,
+                    "url": r.url
+                }
+                for r in good_proxies
+            ]
+            
+            stable_proxies, unstable_proxies = await filter_stable_proxies(proxies_for_check)
+            
+            # Фильтруем good_proxies оставляя только стабильные
+            stable_hosts = {(p["host"], p["port"]) for p in stable_proxies}
+            good_proxies = [r for r in good_proxies if (r.host, r.port) in stable_hosts]
+            
+            # Также фильтруем new_best если он есть
+            if new_best and (new_best.host, new_best.port) not in stable_hosts:
+                logger.warning(f"Лучший прокси нестабилен: {new_best.host}:{new_best.port}")
+                new_best = None
+            
+            logger.info(f"После проверки стабильности: {len(good_proxies)} прокси")
+
         # 3. Уведомление
         if notify and good_proxies:
             logger.info("Этап 3: Отправка уведомлений...")
